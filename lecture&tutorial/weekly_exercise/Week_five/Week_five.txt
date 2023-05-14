@@ -1,0 +1,7 @@
+CREATE CONSTRAINT FOR (m:man) REQUIRE m.name IS UNIQUE;
+
+Create(m:man{team:'Golden State Warrior'})
+Create(s:sport{name:'Basketball',position:'Defender'})
+Create(f:football{name:'Football',size:'5'})
+
+Create (m)-[l:likes{date:'2002-02-24'}]->(s)-[ff:And{reason:'Health Benifit'}]->(f)

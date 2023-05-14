@@ -1,0 +1,7 @@
+Create (m:man{name:'Nima Dorje Lama',age:21});
+Create (f:football{name:'football'});
+Create (s:sport{name:'basketball'});
+MATCH (m:man{name:'Nima Dorje Lama'}),(f:football{name:'football'}),(s:sport{name:'basketball'})
+Create (m)-[p:plays]->(f)-[ff:And]->(s);
+
+Match (f:football{name:'football'})-[ff:And]->(s:sport{name:'basketball'}) Delete ff
