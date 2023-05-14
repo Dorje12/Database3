@@ -1,0 +1,132 @@
+// Create Season nodes
+LOAD CSV WITH HEADERS FROM "file:///EPL_matches.csv" AS row
+
+MERGE (sea:Season {year: row.Season})
+
+CREATE (mth:Game_Match {outcome: row.FTR, full_t_home_goals: toInteger(row.FTHG), full_t_away_goals: toInteger(row.FTAG), half_t_home_goals: toInteger(row.HTHG), half_ay_goals: toInteger(row.HTAG), half_time_reult: row.HTR})
+
+CREATE (sea)-[:IN_SEASON]->(mth)
+
+MERGE (re:Referee{name:row.Referee})<-[:Match_Refereed]-(mth)
+
+CREATE (ht:Team {name: row.HomeTeam})
+CREATE (at:Team {name: row.AwayTeam})
+
+CREATE (mth)-[:Team_match_home]->(ht)
+CREATE (mth)-[:Team_match_away]->(at)
+
+//1 
+MATCH (t:Team)<-[:Team_match_home|Team_match_away]-(mth:Game_Match)
+RETURN DISTINCT t.name AS Team 
+
+//2
+MATCH (l:Team {name: "Liverpool"})<-[:Team_match_home]-(mth:Game_Match)-[:Team_match_away]->(u:Team {name: "Man United"})
+MATCH (sea)-[:IN_SEASON]->(mth:Game_Match) 
+WHERE sea.year >= '2010-11' AND mth.outcome = "H"
+RETURN l.name AS HomeTeam, mth.full_t_home_goals AS HomeGoals, u.name AS AwayTeam, mth.full_t_away_goals AS AwayGoals, sea.year AS Season
+UNION ALL
+MATCH (l:Team {name: "Man United"})<-[:Team_match_home]-(mth:Game_Match)-[:Team_match_away]->(u:Team {name: "Liverpool"})
+MATCH (sea)-[:IN_SEASON]->(mth:Game_Match) 
+WHERE sea.year >= '2010-11' AND mth.outcome = "A"
+RETURN l.name AS HomeTeam, mth.full_t_home_goals AS HomeGoals, u.name AS AwayTeam, mth.full_t_away_goals AS AwayGoals, sea.year AS Season
+
+
+//3
+
+MATCH (re:Referee)<-[:Match_Refereed]-(mth:Game_Match)
+WHERE NOT (re)-[:Match_Refereed]->(:Game_Match)<-[:Match_Refereed]-(re)
+MATCH (sea:Season)-[:IN_SEASON]->(mth)
+WHERE sea.year >= '2000'
+WITH re.name AS referee_name, count(mth) AS games_count
+RETURN referee_name, SUM(games_count) AS MatchesRefereed
+ORDER BY MatchesRefereed DESC
+LIMIT 5
+
+//4
+
+MATCH (sea:Season {year: '2020-21'})-[:IN_SEASON]->(mth:Game_Match)
+MATCH (mth)-[:Team_match_home|Team_match_away]->(t:Team)
+WITH
+  t.name AS TeamName,
+  CASE
+    WHEN (mth)-[:Team_match_home]->(t) THEN mth.full_t_home_goals
+    ELSE mth.full_t_away_goals
+  END AS GoalsScored,
+  CASE
+    WHEN (mth)-[:Team_match_home]->(t) THEN mth.full_t_away_goals
+    ELSE mth.full_t_home_goals
+  END AS GoalsConceded
+RETURN
+  TeamName,
+  SUM(GoalsScored) AS GoalsScored,
+  SUM(GoalsConceded) AS GoalsConceded
+ORDER BY
+  GoalsScored DESC;
+
+//5
+MATCH (sea:Season)-[:IN_SEASON]->(mth:Game_Match)
+MATCH (mth)-[:Team_match_home]->(h:Team)
+WHERE sea.year >= '2000'
+WITH h.name AS team, mth.full_t_home_goals AS goals, mth.outcome AS outcome
+WHERE outcome = 'H'
+RETURN team, COUNT(*) AS home_wins, SUM(goals) AS home_goals
+ORDER BY home_wins DESC, home_goals DESC
+LIMIT 1
+
+//6
+MATCH (t:Team)-[:Team_match_home|Team_match_away]-(mth:Game_Match)<-[:IN_SEASON]-(:Season {year: '2020-21'})
+WHERE ((t)-[:Team_match_home]-(mth) AND mth.outcome = 'A') OR ((t)-[:Team_match_away]-(mth) AND mth.outcome = 'H')
+WITH t.name AS TeamName, COUNT(*) AS Losses
+RETURN TeamName, Losses
+ORDER BY Losses DESC
+LIMIT 1;
+
+7//
+MATCH (t:Team)-[:Team_match_home|Team_match_away]-(mth:Game_Match)<-[:IN_SEASON]-(sea:Season {year: "2020-21"})
+WHERE mth.half_time_reult = 'A' AND mth.outcome = 'H'
+RETURN DISTINCT t.name
+
+//8
+MATCH (sea:Season)
+WHERE sea.year >= '2000'
+MATCH (sea)-[:IN_SEASON]-(mth:Game_Match)
+MATCH (mth)-[:Team_match_home|Team_match_away]-(t:Team)
+WITH t.name AS TeamName, SUM(CASE
+    WHEN (mth)-[:Team_match_home]-(t) THEN
+      CASE
+        WHEN mth.outcome = 'H' THEN 3
+        WHEN mth.outcome = 'D' THEN 1
+        ELSE 0
+      END
+    WHEN (mth)-[:Team_match_away]-(t) THEN
+      CASE
+        WHEN mth.outcome = 'A' THEN 3
+        WHEN mth.outcome = 'D' THEN 1
+        ELSE 0
+      END
+  END) AS Points
+RETURN TeamName, Points
+ORDER BY Points DESC
+LIMIT 1;
+
+//9
+MATCH (sea:Season {year: '2020-21'})-[:IN_SEASON]->(mth:Game_Match)
+MATCH (mth)-[:Team_match_home|Team_match_away]-(t:Team)
+WITH
+  t.name AS TeamName,
+  CASE
+    WHEN (mth)-[:Team_match_home]-(t) THEN mth.full_t_home_goals
+    ELSE mth.full_t_away_goals
+  END AS GoalsScored,
+  CASE
+    WHEN (mth)-[:Team_match_home]-(t) THEN mth.full_t_away_goals
+    ELSE mth.full_t_home_goals
+  END AS GoalsConceded,
+  CASE
+    WHEN (mth.outcome = 'H' AND (mth)-[:Team_match_home]-(t)) OR (mth.outcome = 'A' AND (mth)-[:Team_match_away]-(t)) THEN 3
+    WHEN mth.outcome = 'D' THEN 1
+    ELSE 0
+  END AS Points
+WITH TeamName, SUM(GoalsScored) AS GoalsScored, SUM(GoalsConceded) AS GoalsConceded, SUM(Points) AS TotalPoints
+ORDER BY TotalPoints DESC, GoalsScored - GoalsConceded DESC, GoalsScored DESC
+RETURN TeamName, GoalsScored, GoalsConceded, TotalPoints;
